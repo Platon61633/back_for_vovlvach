@@ -51,7 +51,7 @@ async function parsePMIData() {
 }
 
 // Маршрут для скачивания Excel-файла
-app.get('/api', async (req, res) => {
+app.get('/download-pmi-excel', async (req, res) => {
   try {
     // Парсим данные
     const pmiData = await parsePMIData();
@@ -148,5 +148,5 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Сервер запущен на порту ${PORT}`);
   console.log(`Откройте в браузере: http://localhost:${PORT}`);
-  console.log(`Ссылка для скачивания: http://localhost:${PORT}/api`);
+  console.log(`Ссылка для скачивания: http://localhost:${PORT}/download-pmi-excel`);
 });
