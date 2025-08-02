@@ -1,81 +1,152 @@
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const ExcelJS = require('exceljs');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Включаем CORS middleware для кросс-доменных запросов
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  next();
-});
-
-// Основной маршрут для получения данных
-app.get('/api', async (req, res) => {
+// Функция для парсинга данных
+async function parsePMIData() {
   try {
     const url = 'https://cpk.msu.ru/rating/dep_02';
-    const response = await axios.get(url);
+    const response = await axios.get(url, {
+      timeout: 10000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
     const $ = cheerio.load(response.data);
-
-    // Извлекаем дату
     const date = $('p').eq(15).text().trim();
-
-    // Парсим таблицу
     const table = $('table').eq(8);
+    
     const tableText = table.text().split('\n')
       .map(item => item.trim())
       .filter(item => item !== '');
-
-    // Подготавливаем структуру данных
-    const result = {
+    
+    const data = {
       date: date,
-      columns: [
-        { key: 'num', header: 'номер' },
-        { key: 'sogl', header: 'согласие' },
-        { key: 'prior', header: 'приоритет' },
-        { key: 'marks', header: 'баллы' },
-        { key: 'flag', header: 'статус' }
-      ],
+      headers: ['номер', 'согласие', 'приоритет', 'баллы', 'статус'],
       rows: []
     };
-
-    // Обрабатываем данные таблицы
+    
     for (let i = 16; i < tableText.length - 19; i += 19) {
       const block = tableText.slice(i, i + 19);
-      result.rows.push({
-        num: block[1],
-        sogl: block[2],
-        prior: block[3],
-        marks: block[7],
-        flag: block[16]
-      });
+      data.rows.push([
+        block[1],  // номер
+        block[2],  // согласие
+        block[3],  // приоритет
+        block[7],  // баллы
+        block[16]  // статус
+      ]);
     }
-
-    // Отправляем результат
-    res.json({
-      success: true,
-      data: result,
-      excelConfig: {
-        filename: 'PMI.xlsx',
-        worksheet: 'Data',
-        columnsOrder: ['num', 'sogl', 'prior', 'marks', 'flag']
-      }
-    });
-
+    
+    return data;
+    
   } catch (error) {
-    console.error('Ошибка парсинга:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка при получении данных',
-      details: error.message
-    });
+    console.error('Ошибка при парсинге:', error);
+    throw new Error('Не удалось получить данные с сайта МГУ');
   }
+}
+
+// Маршрут для скачивания Excel-файла
+app.get('/api', async (req, res) => {
+  try {
+    // Парсим данные
+    const pmiData = await parsePMIData();
+    
+    // Создаем Excel-книгу в памяти
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Рейтинг ПМИ');
+    
+    // Добавляем заголовки
+    worksheet.addRow([...pmiData.headers, 'Дата обновления']);
+    
+    // Добавляем данные
+    pmiData.rows.forEach(row => {
+      worksheet.addRow([...row, pmiData.date]);
+    });
+    
+    // Форматируем заголовки
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFD9D9D9' }
+    };
+    
+    // Настраиваем ширину колонок
+    worksheet.columns = [
+      { width: 10 }, // номер
+      { width: 12 }, // согласие
+      { width: 12 }, // приоритет
+      { width: 10 }, // баллы
+      { width: 20 }, // статус
+      { width: 25 }  // дата
+    ];
+    
+    // Устанавливаем заголовки ответа для скачивания файла
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=PMI_Rating.xlsx'
+    );
+    
+    // Отправляем файл
+    await workbook.xlsx.write(res);
+    res.end();
+    
+  } catch (error) {
+    console.error('Ошибка при создании Excel:', error);
+    res.status(500).send(`
+      <h1>Ошибка сервера</h1>
+      <p>${error.message}</p>
+      <p>Попробуйте позже или обратитесь к администратору</p>
+    `);
+  }
+});
+
+// Стартовая страница с инструкцией
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Рейтинг ПМИ МГУ</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; }
+        h1 { color: #1a3d6d; }
+        .btn { 
+          display: inline-block; 
+          padding: 15px 30px; 
+          background: #1a3d6d; 
+          color: white; 
+          text-decoration: none; 
+          border-radius: 5px;
+          font-size: 18px;
+          margin: 20px 0;
+        }
+        .btn:hover { background: #0d2a4d; }
+      </style>
+    </head>
+    <body>
+      <h1>Рейтинг поступающих на ПМИ МГУ</h1>
+      <p>Сервер автоматически парсит данные с официального сайта МГУ и формирует Excel-файл</p>
+      <a href="/download-pmi-excel" class="btn">Скачать Excel-файл</a>
+      <p><small>При проблемах со скачиванием обновите страницу или попробуйте позже</small></p>
+    </body>
+    </html>
+  `);
 });
 
 // Запуск сервера
 app.listen(PORT, () => {
   console.log(`Сервер запущен на порту ${PORT}`);
-  console.log(`Доступ к данным: http://localhost:${PORT}/api`);
+  console.log(`Откройте в браузере: http://localhost:${PORT}`);
+  console.log(`Ссылка для скачивания: http://localhost:${PORT}/api`);
 });
