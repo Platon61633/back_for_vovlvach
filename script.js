@@ -13,7 +13,7 @@ app.use((req, res, next) => {
 });
 
 // Основной маршрут для получения данных
-app.get('/', async (req, res) => {
+app.get('/api', async (req, res) => {
   try {
     const url = 'https://cpk.msu.ru/rating/dep_02';
     const response = await axios.get(url);
@@ -77,5 +77,5 @@ app.get('/', async (req, res) => {
 // Запуск сервера
 app.listen(PORT, () => {
   console.log(`Сервер запущен на порту ${PORT}`);
-  console.log(`Доступ к данным: http://localhost:${PORT}`);
+  console.log(`Доступ к данным: http://localhost:${PORT}/api`);
 });
