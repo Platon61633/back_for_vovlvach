@@ -3,7 +3,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 // Включаем CORS middleware для кросс-доменных запросов
 app.use((req, res, next) => {
@@ -13,7 +13,7 @@ app.use((req, res, next) => {
 });
 
 // Основной маршрут для получения данных
-app.get('/api/pmi-data', async (req, res) => {
+app.get('/', async (req, res) => {
   try {
     const url = 'https://cpk.msu.ru/rating/dep_02';
     const response = await axios.get(url);
@@ -77,5 +77,5 @@ app.get('/api/pmi-data', async (req, res) => {
 // Запуск сервера
 app.listen(PORT, () => {
   console.log(`Сервер запущен на порту ${PORT}`);
-  console.log(`Доступ к данным: http://localhost:${PORT}/api/pmi-data`);
+  console.log(`Доступ к данным: http://localhost:${PORT}`);
 });
